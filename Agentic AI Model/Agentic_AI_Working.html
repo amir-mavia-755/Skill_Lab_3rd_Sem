@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic AI — Interactive Gemini Notebook</title>
+<style>
+:root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#182230;background:#f3f6fb}
+*{box-sizing:border-box}
+body{margin:0;padding:28px 16px}
+main{max-width:960px;margin:auto}
+header,.panel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 6px 24px rgba(15,23,42,.06)}
+header{padding:26px 28px;margin-bottom:18px}
+h1{margin:0 0 7px;color:#173b6c}
+header p{margin:0;color:#64748b}
+.panel{padding:22px;margin:16px 0}
+h2{margin:0 0 12px;font-size:19px;color:#173b6c}
+label{display:block;font-weight:650;margin:14px 0 7px}
+input,select,textarea{width:100%;padding:11px 12px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:white}
+textarea{min-height:110px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+button{border:0;border-radius:8px;padding:11px 16px;background:#1769d2;color:#fff;font-weight:650;font-size:14px;cursor:pointer;margin-top:14px}
+button.secondary{background:#475569}
+button:disabled{opacity:.55;cursor:wait}
+.note{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:12px;font-size:13px;line-height:1.5;margin-top:14px}
+.status{margin-top:12px;color:#475569;font-size:14px;white-space:pre-wrap}
+.result{margin-top:14px;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;line-height:1.65;overflow-wrap:anywhere}
+.result h3{color:#173b6c;margin:14px 0 6px}
+.result p{margin:8px 0}
+.result ul,.result ol{padding-left:24px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}
+footer{text-align:center;color:#64748b;font-size:13px;padding:18px}
+@media(max-width:650px){.row{grid-template-columns:1fr}header,.panel{padding:19px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Agentic AI — Interactive Notebook</h1>
+  <p>A browser-based working version of your 7-cell Google Colab notebook, powered by the Gemini API.</p>
+</header>
+
+<section class="panel">
+  <h2>1. Connect to Gemini</h2>
+  <div class="row">
+    <div>
+      <label for="apiKey">Gemini API key</label>
+      <input id="apiKey" type="password" placeholder="Paste your Gemini API key" autocomplete="off">
+    </div>
+    <div>
+      <label for="model">Gemini model</label>
+      <select id="model">
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (notebook default)</option>
+        <option value="gemini-3.8-flash">gemini-3.8-flash (notebook cell 5)</option>
+        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+      </select>
+    </div>
+  </div>
+  <button id="testBtn" class="secondary">Test Gemini connection</button>
+  <div id="connectionStatus" class="status" role="status" aria-live="polite">Not connected yet. Enter your API key and test the connection.</div>
+  <div class="note"><strong>API key safety:</strong> This standalone page sends the key directly from your browser to Google's Gemini API. Use it for personal/local testing only. Do not publish or share this HTML with a real key. For a public website, put the API call behind a backend server and keep the key there.</div>
+</section>
+
+<section class="panel">
+  <h2>2. Explain Agentic AI</h2>
+  <p>Notebook cell 4: ask Gemini to explain Agentic AI in simple English.</p>
+  <button class="askBtn" data-task="simple">Explain Agentic AI</button>
+  <div id="simpleStatus" class="status"></div>
+  <div id="simpleResult" class="result" hidden></div>
+</section>
+
+<section class="panel">
+  <h2>3. Explain Agentic AI with 3 examples</h2>
+  <p>Notebook cell 5: request a simple explanation with three examples.</p>
+  <button class="askBtn" data-task="examples">Explain with 3 examples</button>
+  <div id="examplesStatus" class="status"></div>
+  <div id="examplesResult" class="result" hidden></div>
+</section>
+
+<section class="panel">
+  <h2>4. Ask Gemini anything</h2>
+  <p>Notebook cell 6: enter your own question and receive a Gemini response.</p>
+  <label for="question">Your question</label>
+  <textarea id="question" placeholder="Ask Gemini anything..."></textarea>
+  <button id="askQuestionBtn">Send question</button>
+  <div id="questionStatus" class="status"></div>
+  <div id="questionResult" class="result" hidden></div>
+</section>
+
+<footer>Based on the uploaded Agentic_AI.ipynb notebook · Browser implementation</footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const keyInput = $("apiKey");
+const modelSelect = $("model");
+
+function getKey(){
+  const key = keyInput.value.trim();
+  if(!key) throw new Error("Please enter your Gemini API key first.");
+  return key;
+}
+function getModel(){ return modelSelect.value; }
+
+async function callGemini(prompt){
+  const key = getKey();
+  const model = getModel();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const response = await fetch(endpoint,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-goog-api-key":key},
+    body:JSON.stringify({
+      contents:[{parts:[{text:prompt}]}],
+      generationConfig:{temperature:0.7}
+    })
+  });
+  let data;
+  try{ data = await response.json(); }
+  catch{ throw new Error("Gemini returned an unreadable response."); }
+  if(!response.ok){
+    throw new Error(data?.error?.message || `API request failed (${response.status}). Check the model name and API key.`);
+  }
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map(part => part.text || "").join("").trim();
+  if(!text) throw new Error("Gemini returned no text. The response may have been blocked or empty.");
+  return text;
+}
+
+function renderText(target, text){
+  // Render as text, not HTML, so model output cannot inject page markup or scripts.
+  target.replaceChildren();
+  const pre = document.createElement("pre");
+  pre.textContent = text;
+  target.appendChild(pre);
+  target.hidden = false;
+}
+
+async function runPrompt(prompt, statusId, resultId, button){
+  const status = $(statusId), result = $(resultId);
+  result.hidden = true;
+  status.textContent = "Contacting Gemini...";
+  button.disabled = true;
+  try{
+    const answer = await callGemini(prompt);
+    renderText(result, answer);
+    status.textContent = "Response received successfully.";
+  }catch(error){
+    status.textContent = "Error: " + error.message;
+  }finally{
+    button.disabled = false;
+  }
+}
+
+$("testBtn").addEventListener("click", async function(){
+  const status = $("connectionStatus");
+  this.disabled = true;
+  status.textContent = "Testing connection...";
+  try{
+    const answer = await callGemini("Reply with exactly: Gemini connected successfully!");
+    status.textContent = "Connection successful. Gemini says: " + answer;
+  }catch(error){
+    status.textContent = "Connection failed: " + error.message;
+  }finally{ this.disabled = false; }
+});
+
+document.querySelectorAll(".askBtn").forEach(button=>{
+  button.addEventListener("click",()=>{
+    const prompt = button.dataset.task === "simple"
+      ? "Explain Agentic AI in simple English."
+      : "Explain Agentic AI in simple English with 3 examples.";
+    const prefix = button.dataset.task;
+    runPrompt(prompt, prefix+"Status", prefix+"Result", button);
+  });
+});
+
+$("askQuestionBtn").addEventListener("click",function(){
+  const question = $("question").value.trim();
+  if(!question){
+    $("questionStatus").textContent = "Please type a question first.";
+    $("questionResult").hidden = true;
+    return;
+  }
+  runPrompt(question,"questionStatus","questionResult",this);
+});
+</script>
+</body>
+</html>
